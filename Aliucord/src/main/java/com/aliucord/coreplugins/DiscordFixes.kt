@@ -8,6 +8,7 @@ package com.aliucord.coreplugins
 
 import android.content.Context
 import android.net.Uri
+import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.aliucord.entities.CorePlugin
 import com.aliucord.patcher.*
@@ -33,16 +34,15 @@ internal class DiscordFixes : CorePlugin(Manifest("DiscordFixes")) {
     override val isHidden = true
     override val isRequired = true
 
-    @Suppress("UNCHECKED_CAST")
     override fun load(context: Context) {
         fixAuthorizedApps()
         fixGifPreviews()
         fixMemberList()
-        fixPrivateChannelListScroll()
+        fixPrivateChannelListScrolling()
         fixStickerCrash()
     }
 
-    fun fixAuthorizedApps() {
+    private fun fixAuthorizedApps() {
         Patcher.addPatch(
             OAuthPermissionViews::class.java.getMethod(
                 "a",
@@ -51,7 +51,7 @@ internal class DiscordFixes : CorePlugin(Manifest("DiscordFixes")) {
             ),
             Hook {
                 if (!it.hasThrowable()) return@Hook
-                
+
                 val exc = it.throwable
                 if (exc is OAuthPermissionViews.InvalidScopeException) {
                     val scope = exc.a()
@@ -62,7 +62,7 @@ internal class DiscordFixes : CorePlugin(Manifest("DiscordFixes")) {
         )
     }
 
-    fun fixGifPreviews() {
+    private fun fixGifPreviews() {
         patcher.after<EmbedResourceUtils>("getPreviewUrls", String::class.java, Int::class.java, Int::class.java, Boolean::class.java) {
             // it.args[3] is a boolean that indicates
             // if the gif should be animated (for example no autoplay setting)
@@ -80,7 +80,8 @@ internal class DiscordFixes : CorePlugin(Manifest("DiscordFixes")) {
         }
     }
 
-    fun fixMemberList() {
+    @Suppress("UNCHECKED_CAST")
+    private fun fixMemberList() {
         patcher.after<ChannelMemberList>("setGroups", List::class.java, Function1::class.java) {
             val rows = this.rows
             val groupsMap = f_memberListGroups[this] as Map<String, MemberListRow>
@@ -88,23 +89,23 @@ internal class DiscordFixes : CorePlugin(Manifest("DiscordFixes")) {
         }
     }
 
-    fun fixPrivateChannelListScrolling() {
+    private fun fixPrivateChannelListScrolling() {
         var unpatch: Runnable? = null
-        
+
         unpatch = patcher.after<WidgetChannelsList>("configureUI", WidgetChannelListModel::class.java)
         { (_, model: WidgetChannelListModel) ->
             if (!model.isGuildSelected && model.items.size > 1) {
                 val manager = WidgetChannelsList.`access$getBinding$p`(this).c.layoutManager!! as LinearLayoutManager
                 if (manager.findFirstVisibleItemPosition() != 0) {
                     manager.scrollToPosition(0)
-                    
-                    if (unpatch != null) unpatch.run()
+
+                    unpatch?.run()
                 }
             }
         }
     }
 
-    fun fixStickerCrash() {
+    private fun fixStickerCrash() {
         patcher.before<Apng>(
             Integer::class.javaPrimitiveType!!,
             Integer::class.javaPrimitiveType!!,
