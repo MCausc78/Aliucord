@@ -12,15 +12,18 @@ import androidx.annotation.Nullable;
 import com.aliucord.utils.*;
 import com.discord.utilities.analytics.AnalyticSuperProperties;
 import com.discord.utilities.rest.RestAPI;
+import com.franmontiel.persistentcookiejar.PersistentCookieJar;
 import com.google.gson.Gson;
 
 import java.io.*;
+import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.math.BigInteger;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.util.*;
+
 
 /** Http Utilities */
 @SuppressWarnings({ "unused", "UnusedReturnValue" })
@@ -492,12 +495,46 @@ public class Http {
         public static Request newDiscordRequest(String route, String method) throws IOException {
             var req = new Request(getDiscordRoute(route), method);
             var headersProvider = RestAPI.AppHeadersProvider.INSTANCE;
+
+            String cookieHeader = null;
+            try {
+                var holder = ((i0.x)Proxy.getInvocationHandler(ReflectUtils.getField(RestAPI.getApi(), "_api"))).d.b;
+                var cookies = (PersistentCookieJar) ReflectUtils.getField(
+                    holder,
+                    "v"
+                );
+                cookieHeader = "";
+                var cookieBuilder = new StringBuilder();
+                for (var cookie : cookies.b) {
+                    var name = cookie.f;
+                    var value = cookie.g;
+
+                    if ("__cf_bm".equals(name)) {
+                        continue;
+                    }
+
+                    if (cookieBuilder.length() > 0) {
+                        cookieBuilder.append("; ");
+                    }
+                    cookieBuilder.append(name);
+                    cookieBuilder.append('=');
+                    cookieBuilder.append(value);
+                }
+                cookieHeader = cookieBuilder.toString();
+            } catch (Exception exc) {
+                Main.logger.error("Failed to get cookie header", exc);
+            }
+
             req.setHeader("User-Agent", headersProvider.getUserAgent())
                 .setHeader("X-Super-Properties", AnalyticSuperProperties.INSTANCE.getSuperPropertiesStringBase64())
-                .setHeader("Accept", "*/*")
                 .setHeader("Authorization", headersProvider.getAuthToken())
                 .setHeader("Accept-Language", headersProvider.getAcceptLanguages())
                 .setHeader("X-Discord-Locale", headersProvider.getLocale());
+
+            if (cookieHeader != null && !cookieHeader.isEmpty()) {
+                req.setHeader("Cookie", cookieHeader);
+            }
+
             return req;
         }
 
@@ -531,13 +568,14 @@ public class Http {
         public static Request newDiscordRNRequest(String route, String method) throws IOException {
             var req = new Request(getDiscordRoute(route), method);
             var headersProvider = RestAPI.AppHeadersProvider.INSTANCE;
-            req.setHeader("User-Agent", RNSuperProperties.userAgent)
-                .setHeader("X-Super-Properties", RNSuperProperties.getSuperPropertiesBase64())
-                .setHeader("Accept-Language", headersProvider.getAcceptLanguages())
-                .setHeader("Accept", "*/*")
-                .setHeader("Authorization", headersProvider.getAuthToken())
-                .setHeader("X-Discord-Locale", headersProvider.getLocale())
-                .setHeader("X-Discord-Timezone", TimeZone.getDefault().getID());
+            req
+                .setHeader("authorization", headersProvider.getAuthToken())
+                .setHeader("accept-language", headersProvider.getAcceptLanguages())
+                .setHeader("x-debug-options", "bugReporterEnabled")
+                .setHeader("x-discord-locale", headersProvider.getLocale())
+                .setHeader("x-discord-timezone", TimeZone.getDefault().getID())
+                .setHeader("x-super-properties", RNSuperProperties.getSuperPropertiesBase64())
+                .setHeader("User-Agent", RNSuperProperties.userAgent);
             return req;
         }
 
